@@ -1,0 +1,9 @@
+Report
+Qitian Ma
+4/17/2020
+I researched on Excess Reserves of Depository Institutions (EXCSRESNS). This series is non seasonally adjusted. However, later statistical test does not show proof of trend or seasonality. 
+First, I did Augmented Dicky-Fuller test, which shows the potential existence of unit root. So I differentiated the data.
+From the general plot, I saw no significant trend or seasonality. Later regression on trends and seasonal dummies further confirmed this. 
+ACF plot points to AR(1) or AR(3). PACF plots point to MA(1). Auto.arima function points to ARMA(1,3). Therefore, I decided to fit ARIMA(1,0,3) model.
+I applied one-step-ahead cross-validation because the general plot shows that cycles do not repeat exactly the same, thus not suitable for train-validation methods. 
+Under RMSE criteria, ARRIMA(1,0,3) performs better then Exponential Average (alpha=0.6) as a baseline model. Test??? 

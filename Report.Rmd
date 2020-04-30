@@ -1,0 +1,115 @@
+---
+title: "Report"
+author: "Qitian Ma"
+date: "4/17/2020"
+output:
+  word_document: default
+  html_document:
+    df_print: paged
+---
+
+```{r setup}
+library(tidyverse)
+library(forecast)
+library(lubridate)
+library(urca)
+
+raw.ts <- read_csv("EXCSRESNS.csv")
+
+raw.ts$DATE <- date(raw.ts$DATE)
+raw.ts$DTBSPCKM <- as.numeric(raw.ts$EXCSRESNS)
+raw.ts <- raw.ts[order(raw.ts$DATE), ]
+
+# select year after 2009
+raw.ts <- raw.ts[300:length(raw.ts$DATE),]
+raw.ts <- ts(raw.ts$EXCSRESNS, start=c(2009,1), freq=12)
+```
+
+1. First we need to test the existence of unit root. The ADF test does not rule out the existence of unit root under 5% significance level (-1.6508 > -3.43). After first difference, the ADF test rules out the existence of unit oot under 5% significance level (-6.3374 < -3.43). 
+```{r cars}
+# unit root test
+summary(ur.df(raw.ts, type="trend", selectlags="BIC"))
+raw.dif.ts <- diff(raw.ts)
+summary(ur.df(raw.dif.ts, type="trend", selectlags="BIC"))
+```
+
+2. Simple Time Plot    
+From the plot, this time series seems stationary, without trend, without seasonality, with cycle.
+
+```{r SimpleTimePlot}
+# general plot
+autoplot(raw.dif.ts) +
+  ggtitle("After frst-differentiation")
+```
+
+3. The ACF-PACF plot points to ARMA(1,1) or ARMA(1,3) and shows not seasonality or unit root.
+
+```{r AcfPacf}
+# plot acf pacf
+acf(raw.dif.ts) # MA(1) or MA(3)
+pacf(raw.dif.ts) # AR(3)
+
+```
+
+4. The statistics do not support trend or seasonality and suggest ARMA(1,3)
+
+```{r Test}
+# trend and seasonality
+raw.dif.trend.lin <- tslm(raw.dif.ts~trend+season)
+
+summary(raw.dif.trend.lin)
+
+auto.arima(raw.dif.ts)
+```
+
+5. ARMA(1,3) beats Exponential Average  (by RMSE and Diebold/Mariano test)
+
+
+```{r Model}
+# model
+arima.mod <- function(x, h){
+  temp <- Arima(order=c(1,0,3), x)
+  temp2 <- tryCatch(forecast(temp, h=h), error=function(e){print("error"); NA})
+  temp2
+}
+
+eCV <- tsCV(raw.dif.ts, arima.mod, h=1)
+rmseCV <- sqrt( mean( eCV^2,na.rm=TRUE))
+
+exptrend.mod <- function(x, h){
+  ses(x, h=1, alpha=0.6)
+}
+
+eCV.exp <- tsCV(raw.dif.ts, exptrend.mod, h=1)
+rmseCV.exp <- sqrt( mean( eCV.exp^2,na.rm=TRUE))
+
+rmseCV < rmseCV.exp
+
+# Diebold/Mariano test
+res.exp <- ses(raw.dif.ts, alpha=0.6)$res
+arima.mod <- arima(raw.dif.ts, order=c(1,0,3))
+res.arma <- arima.mod$res
+dm.test(res.exp, res.arma, alternative="greater")
+summary(arima.mod)
+```
+
+6. Prediction Plot    
+ARIMA may spit NA since MLE does not necessarily converge. However, from the available data, the prediction result is good.
+
+```{r PredictionPlot}
+# Prediction Plot
+store <- c()
+n=1
+while(n<=length(raw.dif.ts)){
+  temp <- tryCatch(Arima(order=c(1,0,3), raw.dif.ts[1:n]), error=function(e){NA})
+  temp2 <- tryCatch(forecast(temp, h=1), error=function(e){NA})
+  store <<- c(store, ifelse(any(is.na(temp2)), NA, temp2$mean))
+  n <- n+1
+}
+
+store <- ts(store, start=c(2009,2), freq=12) # The first input series is just 2009-1 and the prediction is 2009-2
+
+autoplot(raw.dif.ts) +
+  autolayer(store, series="one-step ahead prediction", color="red") +
+  ggtitle("True (black) vs Predicted (red)")
+```
